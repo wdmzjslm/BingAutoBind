@@ -41,6 +41,7 @@ class BingBind():
                         'x-csrf-token': csrf}
         self.webs = []
         self.need_push_webs = []
+        self.need_ping_webs = []
         self.need_add_sites = []
         self.lock = threading.Lock()
         self.init_urls()
@@ -159,6 +160,20 @@ class BingBind():
             return True
         return False
 
+    def ping_sitemap(self, domain,sitemap_list):
+        """提交sitemap"""
+        url = f"https://www.bing.com/webmasters/api/sitemaps/submit?siteurl=http://{domain}"
+        uri =[{"uri":i} for i in sitemap_list]
+        data = {
+            "siteUrl": f"http://{domain}",
+            "sitemaps": uri
+        }
+        resp = httpx.post(url, json=data, headers=self.headers, timeout=30)
+        if "SUCCESSFUL" in resp.text:
+            return True
+        return False
+        
+
     def add_go(self, tname):
         """添加·线程"""
         while len(self.need_add_sites) > 0:
@@ -169,7 +184,7 @@ class BingBind():
             except Exception as error:
                 print(error)
 
-    def bind_site(self):
+    def bind_site_func(self):
         """绑定网站"""
         # 获取所有网站
         webs_dict = self.get_webs()
@@ -193,8 +208,6 @@ class BingBind():
         webs_dict = self.get_webs()
         self.webs = webs_dict['webs']
         for url in self.urls:
-            webs_dict = self.get_webs()
-            self.webs = webs_dict['webs']
             webs_verify = webs_dict['webs_verify']
             if url in self.webs:
                 print(f'{url} 添加成功 验证绑定成功')
@@ -231,7 +244,8 @@ class BingBind():
                 if push_count < 1:
                     print(f'[{tname}] {web} 今日推送额度不足 跳过')
                     continue
-                sitemap_url = f"http://{web}/sitemap.xml"
+                # 获取网站sitemap.xml中的链接
+                sitemap_url = self.sitemap[0].replace('{域名}',web)
                 need_push_urls = self.get_url_from_sitemap_link(
                     sitemap_url, push_count)
                 # 获取账号apikey
@@ -241,15 +255,18 @@ class BingBind():
                 if push_result:
                     print(f"[{tname}] {web} 网址{len(need_push_urls)}个 推送成功")
                     # 写入推送日志
-                    with open(f'log/{datetime.date.today()}.txt', 'a', encoding='utf-8')as txt_f:
+                    with open(f'log/{datetime.date.today()}_push_url.txt', 'a', encoding='utf-8')as txt_f:
                         txt_f.write("\n".join(need_push_urls)+"\n")
                 else:
                     print(f"[{tname}] {web} 网址推送失败")
             except Exception as error:
                 print(error)
 
-    def push_site(self):
+    def push_site_func(self):
         """推送网站"""
+        if not int(self.conf['user']['push_site']):
+            print('config.ini配置生效 跳过自动推送网址')
+            return
         webs_dict = self.get_webs()
         self.webs = webs_dict['webs']
 
@@ -261,9 +278,52 @@ class BingBind():
             # 仅推送urls.txt中的网站
             self.need_push_webs = [
                 url for url in self.urls if url in self.webs]
-
+        print(self.need_push_webs)
         threads = [threading.Thread(
             target=self.push_go, args=(f't{i}',)) for i in range(10)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+    def ping_go(self, tname):
+        """提交sitemap·线程"""
+        while len(self.need_ping_webs) > 0:
+            try:
+                with self.lock:
+                    web = self.need_ping_webs.pop(0)
+                sitemap_urls = [i.replace('{域名}',web) for i in self.sitemap]
+                # 推送网址
+                ping_result = self.ping_sitemap(web,sitemap_urls)
+                if ping_result:
+                    print(f"[{tname}] {sitemap_urls} 提交成功")
+                    # 写入推送日志
+                    with open(f'log/{datetime.date.today()}_ping_sitemap.txt', 'a', encoding='utf-8')as txt_f:
+                        txt_f.write("\n".join(sitemap_urls)+"\n")
+                else:
+                    print(f"[{tname}] {sitemap_urls} 提交失败")
+            except Exception as error:
+                print(error)
+
+    def ping_sitemap_func(self):
+        """提交sitemap"""
+        if not int(self.conf['user']['ping_sitemap']):
+            print('config.ini配置生效 跳过自动提交sitemap')
+            return
+        webs_dict = self.get_webs()
+        self.webs = webs_dict['webs']
+
+        if int(self.conf['user']['ping_all']):
+            # 推送账号中所有已绑定的网站
+            self.need_ping_webs = self.webs
+            print('本次将推送更新账号中所有网站')
+        else:
+            # 仅推送urls.txt中的网站
+            self.need_ping_webs = [
+                url for url in self.urls if url in self.webs]
+        print(self.need_ping_webs)
+        threads = [threading.Thread(
+            target=self.ping_go, args=(f't{i}',)) for i in range(10)]
         for thread in threads:
             thread.start()
         for thread in threads:
@@ -274,9 +334,11 @@ def main():
     """主程"""
     bing = BingBind()
     print('## 开始绑定网站')
-    bing.bind_site()
+    bing.bind_site_func()
     print('## 开始推送网站')
-    bing.push_site()
+    bing.push_site_func()
+    print('## 开始提交sitemap')
+    bing.ping_sitemap_func()
 
 
 if __name__ == "__main__":

@@ -1,0 +1,3 @@
+http://{域名}/sitemap.xml
+http://{域名}/sitemap.txt
+http://{域名}/seo.xml

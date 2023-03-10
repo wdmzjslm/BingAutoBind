@@ -19,7 +19,7 @@ class BingBind():
 
     def __init__(self):
         self.conf = configparser.ConfigParser()
-        self.conf.read('user/config.ini')
+        self.conf.read('user/config.ini',encoding='utf-8')
         self.urls = self.get_urls()
         self.sitemap = self.get_sitemap()
         csrf, cookie = linecache.getlines(self.conf['filePath']['cookie'])[
@@ -85,6 +85,7 @@ class BingBind():
         """获取用户urls"""
         urls = [i.strip() for i in linecache.getlines(
             self.conf['filePath']['urls']) if i.strip() != ""]
+        urls = list(set(urls))
         return urls
 
     def get_sitemap(self):
@@ -333,11 +334,11 @@ class BingBind():
 def main():
     """主程"""
     bing = BingBind()
-    print('## 开始绑定网站')
+    print('\n## 开始绑定网站')
     bing.bind_site_func()
-    print('## 开始推送网站')
+    print('\n## 开始推送网站')
     bing.push_site_func()
-    print('## 开始提交sitemap')
+    print('\n## 开始提交sitemap')
     bing.ping_sitemap_func()
 
 

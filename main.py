@@ -119,6 +119,7 @@ class BingBind():
         """获取账号apikey"""
         url = "https://www.bing.com/webmasters/api/apikey/get"
         resp = httpx.get(url, headers=self.headers, timeout=30)
+        print("获取账号apikey",resp.text)
         return resp.text.replace('"', '')
 
     @retry(stop_max_attempt_number=3)
@@ -156,9 +157,11 @@ class BingBind():
             "siteUrl": f"http://{domain}",
             "urlList": urls
         }
+        # print(urls)
         resp = httpx.post(url, json=data, timeout=30)
         if resp.text == '{"d":null}':
             return True
+        print(domain,resp.text)
         return False
 
     def ping_sitemap(self, domain,sitemap_list):
